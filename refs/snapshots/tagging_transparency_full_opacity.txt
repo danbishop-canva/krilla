@@ -1,0 +1,290 @@
+%PDF-1.7
+%AAAA
+
+1 0 obj
+<<
+  /Type /Pages
+  /Count 2
+  /Kids [10 0 R 11 0 R]
+>>
+endobj
+
+2 0 obj
+<<
+  /Type /StructTreeRoot
+  /RoleMap <<
+    /Datetime /Span
+    /Terms /Part
+    /Title /P
+    /Strong /Span
+    /Em /Span
+  >>
+  /K [7 0 R]
+  /ParentTree <<
+    /Nums [0 3 0 R 1 4 0 R]
+  >>
+  /ParentTreeNextKey 2
+>>
+endobj
+
+3 0 obj
+[5 0 R 5 0 R 5 0 R 5 0 R]
+endobj
+
+4 0 obj
+[6 0 R 6 0 R 6 0 R 6 0 R]
+endobj
+
+5 0 obj
+<<
+  /Type /StructElem
+  /S /P
+  /P 7 0 R
+  /K [0 1 2 3]
+  /Pg 10 0 R
+>>
+endobj
+
+6 0 obj
+<<
+  /Type /StructElem
+  /S /P
+  /P 7 0 R
+  /K [0 1 2 3]
+  /Pg 11 0 R
+>>
+endobj
+
+7 0 obj
+<<
+  /Type /StructElem
+  /S /Document
+  /P 2 0 R
+  /K [5 0 R 6 0 R]
+>>
+endobj
+
+8 0 obj
+<<
+  /ProcSet [/PDF /Text /ImageC /ImageB]
+>>
+endobj
+
+9 0 obj
+<<
+  /ProcSet [/PDF /Text /ImageC /ImageB]
+>>
+endobj
+
+10 0 obj
+<<
+  /Type /Page
+  /Resources 8 0 R
+  /MediaBox [0 0 595 842]
+  /StructParents 0
+  /Parent 1 0 R
+  /Contents 12 0 R
+>>
+endobj
+
+11 0 obj
+<<
+  /Type /Page
+  /Resources 9 0 R
+  /MediaBox [0 0 595 842]
+  /StructParents 1
+  /Parent 1 0 R
+  /Contents 13 0 R
+>>
+endobj
+
+12 0 obj
+<<
+  /Length 435
+>>
+stream
+/P <<
+  /MCID 0
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 1
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/Artifact BMC
+q
+1 0 0 -1 0 842 cm
+0 g
+80 20 m
+40 20 l
+40 40 l
+80 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 2
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 3
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+endstream
+endobj
+
+13 0 obj
+<<
+  /Length 435
+>>
+stream
+/P <<
+  /MCID 0
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 1
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/Artifact BMC
+q
+1 0 0 -1 0 842 cm
+0 g
+80 20 m
+40 20 l
+40 40 l
+80 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 2
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+/P <<
+  /MCID 3
+>> BDC
+q
+1 0 0 -1 0 842 cm
+0 g
+20 20 m
+40 20 l
+40 40 l
+20 40 l
+h
+f
+Q
+EMC
+endstream
+endobj
+
+14 0 obj
+<<
+  /Type /Catalog
+  /Pages 1 0 R
+  /StructTreeRoot 2 0 R
+  /MarkInfo <<
+    /Marked true
+    /Suspects false
+  >>
+>>
+endobj
+
+xref
+0 15
+0000000000 65535 f
+0000000016 00000 n
+0000000088 00000 n
+0000000322 00000 n
+0000000364 00000 n
+0000000406 00000 n
+0000000495 00000 n
+0000000584 00000 n
+0000000671 00000 n
+0000000733 00000 n
+0000000795 00000 n
+0000000931 00000 n
+0000001067 00000 n
+0000001557 00000 n
+0000002047 00000 n
+trailer
+<<
+  /Size 15
+  /Root 14 0 R
+  /ID [(dOjpueFpsma/7p4AqYu9IA==) (dOjpueFpsma/7p4AqYu9IA==)]
+>>
+startxref
+2183
+%%EOF
