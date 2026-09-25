@@ -9,9 +9,9 @@
 //!   by settings appropriate metadata. This happens under-the-hood and is completely abstracted
 //!   away from the user.
 //! - For aspects that are out of control of krilla and dependent on the input, krilla will perform
-//!   a validation that the input is compatible with the standard. krilla will record all violations,
-//!   and when calling `document.finish()`, in case there is at least one violation, krilla will
-//!   return them as an error, instead of returning the finished document. See [`ValidationError`].
+//!   a validation that the input is compatible with the standard. `document.finish()` returns
+//!   violations as an error, while `document.finish_relaxed()` returns the PDF and violations,
+//!   withholding conformance claims if any violations occur. See [`ValidationError`].
 //! - Finally, some standards have requirements that cannot possibly be validated by krilla, as
 //!   they are semantic in nature. It is upon you, as a user of that library, to ensure that those
 //!   requirements are fulfilled. Therefore, while krilla tries to make it as easy as possible
@@ -213,6 +213,13 @@ impl Validators {
     /// Returns the PDF/UA accessibility validator, if set.
     pub fn accessibility(self) -> Option<Accessibility> {
         self.ua
+    }
+
+    /// Return a copy without conformance claims.
+    pub(crate) fn without_conformance_claims(mut self) -> Self {
+        self.a = None;
+        self.ua = None;
+        self
     }
 
     /// Whether the font must supply valid Unicode code points for each of the

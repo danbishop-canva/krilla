@@ -83,8 +83,9 @@ pub struct SerializeSettings {
     pub cmyk_profile: Option<ICCProfile<4>>,
     /// A validator and PDF version used for export.
     ///
-    /// In case validation fails, export will fail, and a list of validation errors that
-    /// occurred will be returned instead of the PDF.
+    /// Validation failures prevent export through [`Document::finish`].
+    /// [`Document::finish_relaxed`] instead returns the PDF and its validation errors,
+    /// omitting PDF/A and PDF/UA conformance metadata when any error is recorded.
     ///
     /// **Important**: Make sure to carefully read the documentation of the [`validate`] module
     /// before using this feature! Just setting a validator might not be enough to ensure that
@@ -96,6 +97,8 @@ pub struct SerializeSettings {
     /// is a bug).
     ///
     /// [`validate`]: crate::configure::validate
+    /// [`Document::finish`]: crate::document::Document::finish
+    /// [`Document::finish_relaxed`]: crate::document::Document::finish_relaxed
     pub configuration: Configuration,
     /// Whether to enable the creation of tagged documents. See the module documentation
     /// of [`tagging`] for more information about tagged PDF documents.
@@ -462,7 +465,11 @@ impl SerializeContext {
         &mut self.validation_store
     }
 
-    pub(crate) fn finish(mut self, mut chunk_container: ChunkContainer) -> KrillaResult<Pdf> {
+    pub(crate) fn finish(
+        mut self,
+        mut chunk_container: ChunkContainer,
+        relaxed: bool,
+    ) -> KrillaResult<(Pdf, Vec<ValidationError>)> {
         // We need to be careful here that we serialize the objects in the right order,
         // as in some cases we use MaybeTake::take to remove an object, which means that
         // no object that is serialized afterwards must depend on it.
@@ -484,11 +491,12 @@ impl SerializeContext {
         self.serialize_tag_tree(&mut chunk_container)?;
 
         // Create the final PDF.
-        let pdf = chunk_container.finish(&mut self)?;
+        let pdf = chunk_container.finish(&mut self, relaxed)?;
         self.register_limits(pdf.limits());
 
         self.check_validator_limits();
 
+        let mut report = vec![];
         if !self.validation_errors.is_empty() {
             // Deduplicate errors, while still preserving order.
             let mut errors = vec![];
@@ -498,14 +506,17 @@ impl SerializeContext {
             )]
             let mut seen = HashSet::new();
 
-            for error in self.validation_errors {
+            for error in std::mem::take(&mut self.validation_errors) {
                 if !seen.contains(&error) {
                     seen.insert(error.clone());
                     errors.push(error);
                 }
             }
 
-            return Err(KrillaError::Validation(errors));
+            if !relaxed {
+                return Err(KrillaError::Validation(errors));
+            }
+            report = errors.into_iter().map(|(error, _)| error).collect();
         }
 
         if let Some(limit_error) = self.check_version_limits() {
@@ -515,7 +526,13 @@ impl SerializeContext {
         // Just a sanity check that we've actually processed all items.
         self.global_objects.assert_all_taken();
 
-        Ok(pdf)
+        Ok((pdf, report))
+    }
+}
+
+impl SerializeContext {
+    pub(crate) fn has_validation_errors(&self) -> bool {
+        !self.validation_errors.is_empty()
     }
 }
 
@@ -970,7 +987,7 @@ impl SerializeContext {
         Ok(())
     }
 
-    fn check_validator_limits(&mut self) {
+    pub(crate) fn check_validator_limits(&mut self) {
         if self.cur_ref > Ref::new(8388607) {
             self.register_validation_error(ValidationError::TooManyIndirectObjects)
         }

@@ -15,6 +15,7 @@
 //! [`Page`]: Page
 
 use crate::chunk_container::ChunkContainer;
+use crate::configure::ValidationError;
 use crate::destination::NamedDestination;
 use crate::error::KrillaResult;
 use crate::form::FieldTree;
@@ -146,7 +147,22 @@ impl Document {
     }
 
     /// Attempt to export the document to a PDF file.
-    pub fn finish(mut self) -> KrillaResult<Vec<u8>> {
+    pub fn finish(self) -> KrillaResult<Vec<u8>> {
+        self.finish_impl(false).map(|(pdf, _)| pdf)
+    }
+
+    /// Export the document and return validation errors alongside the PDF.
+    ///
+    /// Validation errors do not prevent export. If any are recorded, the PDF does not
+    /// claim PDF/A or PDF/UA conformance in its XMP metadata. Other errors still
+    /// prevent export.
+    ///
+    /// Use [`Self::finish`] to reject documents with validation errors.
+    pub fn finish_relaxed(self) -> KrillaResult<(Vec<u8>, Vec<ValidationError>)> {
+        self.finish_impl(true)
+    }
+
+    fn finish_impl(mut self, relaxed: bool) -> KrillaResult<(Vec<u8>, Vec<ValidationError>)> {
         // Write empty page if none has been created yet.
         if self.serializer_context.page_infos().is_empty() {
             self.start_page();
@@ -157,6 +173,7 @@ impl Document {
             chunk_container,
         } = self;
 
-        Ok(serializer_context.finish(chunk_container)?.finish())
+        let (pdf, errors) = serializer_context.finish(chunk_container, relaxed)?;
+        Ok((pdf.finish(), errors))
     }
 }

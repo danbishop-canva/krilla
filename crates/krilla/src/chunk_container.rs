@@ -101,7 +101,7 @@ impl ChunkContainer {
         }
     }
 
-    pub(crate) fn finish(self, sc: &mut SerializeContext) -> KrillaResult<Pdf> {
+    pub(crate) fn finish(self, sc: &mut SerializeContext, relaxed: bool) -> KrillaResult<Pdf> {
         let mut remapped_ref = Ref::new(1);
         let mut remapper = HashMap::new();
 
@@ -183,9 +183,10 @@ impl ChunkContainer {
             metadata.serialize_xmp_metadata(&mut xmp, sc, &instance_id);
         }
 
-        let settings = sc.serialize_settings();
-        let validators = settings.validators();
-        validators.write_xmp(&mut xmp);
+        let validators = sc.serialize_settings().validators();
+        if !relaxed {
+            validators.write_xmp(&mut xmp);
+        }
 
         xmp.num_pages(sc.page_infos().len() as u32);
         xmp.format("application/pdf");
@@ -202,16 +203,17 @@ impl ChunkContainer {
         let named_destinations = sc.global_objects.named_destinations.take();
         let embedded_files = sc.global_objects.embedded_files.take();
 
-        let meta_ref = if sc.serialize_settings().xmp_metadata {
+        let mut xmp = Some(xmp);
+        let meta_ref = sc.serialize_settings().xmp_metadata.then(|| {
             let meta_ref = remapped_ref.bump();
-            let xmp_buf = xmp.finish(None);
-            pdf.stream(meta_ref, xmp_buf.as_bytes())
-                .pair(Name(b"Type"), Name(b"Metadata"))
-                .pair(Name(b"Subtype"), Name(b"XML"));
-            Some(meta_ref)
-        } else {
-            None
-        };
+            if !relaxed {
+                let xmp_buf = xmp.take().unwrap().finish(None);
+                pdf.stream(meta_ref, xmp_buf.as_bytes())
+                    .pair(Name(b"Type"), Name(b"Metadata"))
+                    .pair(Name(b"Subtype"), Name(b"XML"));
+            }
+            meta_ref
+        });
 
         let catalog_ref = remapped_ref.bump();
 
@@ -343,6 +345,28 @@ impl ChunkContainer {
         }
 
         catalog.finish();
+
+        if relaxed {
+            // The catalog can register the last document-level errors. Decide whether to
+            // claim conformance only after those and the PDF limits have been checked.
+            sc.register_limits(pdf.limits());
+            sc.check_validator_limits();
+
+            if let Some(meta_ref) = meta_ref {
+                let validators_for_xmp = if sc.has_validation_errors() {
+                    validators.without_conformance_claims()
+                } else {
+                    validators
+                };
+                let mut xmp = xmp.take().unwrap();
+                validators_for_xmp.write_xmp(&mut xmp);
+
+                let xmp_buf = xmp.finish(None);
+                pdf.stream(meta_ref, xmp_buf.as_bytes())
+                    .pair(Name(b"Type"), Name(b"Metadata"))
+                    .pair(Name(b"Subtype"), Name(b"XML"));
+            }
+        }
 
         Ok(pdf)
     }

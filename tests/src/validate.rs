@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
 use krilla::action::{LinkAction, ResetFormAction};
 use krilla::annotation::{Annotation, LinkAnnotation, Target};
 use krilla::color::{rgb, separation};
 use krilla::configure::validate::VersionedFeature;
-use krilla::configure::{Accessibility, ConfigurationBuilder, PdfVersion, ValidationError};
+use krilla::configure::{
+    Accessibility, Archival, ConfigurationBuilder, PdfVersion, ValidationError,
+};
 use krilla::embed::EmbedError;
 use krilla::error::KrillaError;
 use krilla::form::{FieldTree, FormField};
@@ -12,6 +16,7 @@ use krilla::num::NormalizedF32;
 use krilla::outline::Outline;
 use krilla::page::Page;
 use krilla::paint::{Fill, FillRule, LinearGradient, SpreadMethod};
+use krilla::pdf::Pdf;
 use krilla::tagging::{Artifact, ArtifactType, ContentTag, SpanTag, TagGroup, TagKind, TagTree};
 use krilla::tagging::{ListNumbering, TableHeaderScope, Tag};
 use krilla::text::{Font, TextDirection};
@@ -42,6 +47,126 @@ fn pdf_ua1_settings(version: PdfVersion) -> SerializeSettings {
             .unwrap(),
         ..settings_1()
     }
+}
+
+fn pdf_ua1_with_archival(archival: Option<Archival>) -> SerializeSettings {
+    let mut builder = ConfigurationBuilder::new().with_accessibility_validator(Accessibility::UA1);
+    if let Some(archival) = archival {
+        builder = builder.with_archival_validator(archival);
+    }
+
+    SerializeSettings {
+        configuration: builder.finish().unwrap(),
+        ..settings_1()
+    }
+}
+
+fn basic_pdf_ua_document(settings: SerializeSettings, with_outline: bool) -> Document {
+    let mut document = Document::new_with(settings);
+    document.set_metadata(metadata_2());
+    document.set_tag_tree(TagTree::new());
+    if with_outline {
+        document.set_outline(Outline::new());
+    }
+    document
+}
+
+#[test]
+fn finish_relaxed_pdf_ua_withholds_claim_and_reports_errors() {
+    let document = basic_pdf_ua_document(pdf_ua1_with_archival(None), false);
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+
+    assert_eq!(errors, vec![ValidationError::MissingDocumentOutline]);
+    let content = String::from_utf8_lossy(&pdf);
+    assert!(!content.contains("pdfuaid:part"));
+    assert!(content.contains("dc:title"));
+    assert!(Pdf::new(Arc::new(pdf)).is_ok());
+}
+
+#[test]
+fn finish_relaxed_reports_metadata_validation() {
+    let mut document = basic_pdf_ua_document(pdf_ua1_with_archival(None), true);
+    document.set_metadata(
+        Metadata::new()
+            .language("en".to_string())
+            .creation_date(DateTime::new(2001)),
+    );
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+
+    assert_eq!(errors, vec![ValidationError::NoDocumentTitle]);
+    assert!(!String::from_utf8_lossy(&pdf).contains("pdfuaid:part"));
+}
+
+#[test]
+fn finish_relaxed_claims_valid_pdf_ua_document() {
+    let document = basic_pdf_ua_document(pdf_ua1_with_archival(None), true);
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+
+    assert!(errors.is_empty());
+    assert!(String::from_utf8_lossy(&pdf).contains("pdfuaid:part"));
+    assert!(Pdf::new(Arc::new(pdf)).is_ok());
+}
+
+#[test]
+fn finish_remains_strict() {
+    let document = basic_pdf_ua_document(pdf_ua1_settings(PdfVersion::Pdf17), false);
+    assert_eq!(
+        validation_errors(document.finish()),
+        vec![ValidationError::MissingDocumentOutline]
+    );
+}
+
+#[test]
+fn finish_relaxed_withholds_both_claims_for_pdf_ua_error() {
+    let document = basic_pdf_ua_document(pdf_ua1_with_archival(Some(Archival::A3_B)), false);
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+    let content = String::from_utf8_lossy(&pdf);
+
+    assert_eq!(errors, vec![ValidationError::MissingDocumentOutline]);
+    assert!(!content.contains("pdfaid:part"));
+    assert!(!content.contains("pdfuaid:part"));
+}
+
+#[test]
+fn finish_relaxed_withholds_both_claims_for_pdf_a_error() {
+    let mut document = basic_pdf_ua_document(pdf_ua1_with_archival(Some(Archival::A3_B)), true);
+    cmyk_document_impl(&mut document);
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+    let content = String::from_utf8_lossy(&pdf);
+
+    assert!(errors.contains(&ValidationError::MissingCMYKProfile));
+    assert!(!content.contains("pdfaid:part"));
+    assert!(!content.contains("pdfuaid:part"));
+    assert!(Pdf::new(Arc::new(pdf)).is_ok());
+}
+
+#[test]
+fn finish_relaxed_claims_valid_pdf_a_and_pdf_ua_document() {
+    let document = basic_pdf_ua_document(pdf_ua1_with_archival(Some(Archival::A3_B)), true);
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+    let content = String::from_utf8_lossy(&pdf);
+
+    assert!(errors.is_empty());
+    assert!(content.contains("pdfaid:part"));
+    assert!(content.contains("pdfuaid:part"));
+}
+
+#[test]
+fn finish_relaxed_withholds_pdf_a_claim() {
+    let settings = SerializeSettings {
+        configuration: ConfigurationBuilder::new()
+            .with_archival_validator(Archival::A3_B)
+            .finish()
+            .unwrap(),
+        ..settings_1()
+    };
+    let mut document = Document::new_with(settings);
+    document.set_metadata(metadata_2());
+    cmyk_document_impl(&mut document);
+
+    let (pdf, errors) = document.finish_relaxed().unwrap();
+    assert!(errors.contains(&ValidationError::MissingCMYKProfile));
+    assert!(!String::from_utf8_lossy(&pdf).contains("pdfaid:part"));
 }
 
 fn q_nesting_impl(settings: SerializeSettings) -> Document {
