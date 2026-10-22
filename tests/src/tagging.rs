@@ -4,7 +4,9 @@ use krilla::action::{Action, LinkAction};
 use krilla::annotation::{LinkAnnotation, Target};
 use krilla::error::KrillaError;
 use krilla::geom::{PathBuilder, Point, Rect, Size, Transform};
+use krilla::mask::MaskType;
 use krilla::metadata::Metadata;
+use krilla::num::NormalizedF32;
 use krilla::outline::Outline;
 use krilla::page::PageSettings;
 use krilla::paint::{Fill, Stroke};
@@ -851,4 +853,112 @@ fn tagging_missing_identifier_in_tree() {
     document.set_tag_tree(tag_tree);
 
     let _ = document.finish();
+}
+
+// Use paths to keep the snapshots focused on structure and content streams.
+fn tagged_rectangle(surface: &mut Surface<'_>, group: &mut TagGroup) {
+    let id = surface.start_tagged(ContentTag::Other);
+    surface.draw_path(&rect_to_path(20.0, 20.0, 40.0, 40.0));
+    surface.end_tagged();
+    group.push(id);
+}
+
+fn tagging_transparency_group_impl(document: &mut Document, push_group: impl Fn(&mut Surface<'_>)) {
+    let mut tree = TagTree::new();
+    // Identical content on two pages must still have distinct XObject identities
+    // and MCR /Pg references.
+    for _ in 0..2 {
+        let mut group = TagGroup::new(Tag::P);
+        let mut page = document.start_page();
+        let mut surface = page.surface();
+        tagged_rectangle(&mut surface, &mut group);
+        push_group(&mut surface);
+        tagged_rectangle(&mut surface, &mut group);
+        surface.start_tagged(ContentTag::Artifact(Artifact::default()));
+        surface.draw_path(&rect_to_path(80.0, 20.0, 40.0, 40.0));
+        surface.end_tagged();
+        tagged_rectangle(&mut surface, &mut group);
+        surface.pop();
+        tagged_rectangle(&mut surface, &mut group);
+        surface.finish();
+        page.finish();
+        tree.push(group);
+    }
+    document.set_tag_tree(tree);
+}
+
+#[snapshot(document)]
+fn tagging_transparency_opacity(document: &mut Document) {
+    tagging_transparency_group_impl(document, |surface| {
+        surface.push_opacity(NormalizedF32::new(0.5).unwrap());
+    });
+}
+
+#[snapshot(document)]
+fn tagging_transparency_mask(document: &mut Document) {
+    tagging_transparency_group_impl(document, |surface| {
+        let mask = crate::basic_mask(surface, MaskType::Alpha);
+        surface.push_mask(mask);
+    });
+}
+
+#[snapshot(document)]
+fn tagging_transparency_isolated(document: &mut Document) {
+    tagging_transparency_group_impl(document, |surface| surface.push_isolated());
+}
+
+#[snapshot(document)]
+fn tagging_transparency_full_opacity(document: &mut Document) {
+    // Opacity one does not create a sub-builder: all MCIDs belong to the page.
+    tagging_transparency_group_impl(document, |surface| {
+        surface.push_opacity(NormalizedF32::ONE);
+    });
+}
+
+#[snapshot(document, settings_12)]
+fn tagging_transparency_disabled(document: &mut Document) {
+    tagging_transparency_group_impl(document, |surface| {
+        surface.push_opacity(NormalizedF32::new(0.5).unwrap());
+    });
+}
+
+#[snapshot(document)]
+fn tagging_transparency_nested(document: &mut Document) {
+    let mut tree = TagTree::new();
+    let mut group = TagGroup::new(Tag::P);
+    let mut page = document.start_page();
+    let mut surface = page.surface();
+    tagged_rectangle(&mut surface, &mut group);
+    surface.push_opacity(NormalizedF32::new(0.5).unwrap());
+    tagged_rectangle(&mut surface, &mut group);
+    let mask = crate::basic_mask(&mut surface, MaskType::Alpha);
+    surface.push_mask(mask);
+    tagged_rectangle(&mut surface, &mut group);
+    surface.push_isolated();
+    tagged_rectangle(&mut surface, &mut group);
+    surface.pop();
+    tagged_rectangle(&mut surface, &mut group);
+    surface.pop();
+    tagged_rectangle(&mut surface, &mut group);
+    surface.pop();
+    tagged_rectangle(&mut surface, &mut group);
+    surface.finish();
+    page.finish();
+    tree.push(group);
+    document.set_tag_tree(tree);
+}
+
+#[snapshot(document)]
+fn tagging_transparency_artifact_only(document: &mut Document) {
+    let mut page = document.start_page();
+    let mut surface = page.surface();
+    surface.push_isolated();
+    surface.start_tagged(ContentTag::Artifact(Artifact::default()));
+    surface.draw_path(&rect_to_path(20.0, 20.0, 40.0, 40.0));
+    surface.end_tagged();
+    surface.pop();
+    surface.finish();
+    page.finish();
+    // An artifact-only XObject must not acquire a StructParents entry.
+    document.set_tag_tree(TagTree::new());
 }
