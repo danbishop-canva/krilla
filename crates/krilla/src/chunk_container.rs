@@ -1,7 +1,7 @@
 use pdf_writer::{Chunk, Finish, Name, Pdf, Ref, Str, TextStr};
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use xmp_writer::{RenditionClass, XmpWriter};
+use xmp_writer::XmpWriter;
 
 use crate::configure::{PdfVersion, ValidationError};
 use crate::error::{KrillaError, KrillaResult};
@@ -205,7 +205,6 @@ impl ChunkContainer {
             instance_id.as_bytes().to_vec(),
         ));
 
-        xmp.rendition_class(RenditionClass::Proof);
         sc.serialize_settings().pdf_version().write_xmp(&mut xmp);
 
         let named_destinations = sc.global_objects.named_destinations.take();

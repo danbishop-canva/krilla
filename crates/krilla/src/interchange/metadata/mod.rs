@@ -8,7 +8,7 @@
 mod relax_ng;
 pub mod xmp;
 
-use pdf_writer::{Finish, Name, Pdf, Ref, TextStr};
+use pdf_writer::{types::TrappingStatus, Finish, Name, Pdf, Ref, TextStr};
 use std::borrow::Cow;
 use std::cell::LazyCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -38,6 +38,7 @@ pub struct Metadata {
     pub(crate) version_id: Option<String>,
     pub(crate) language: Option<String>,
     pub(crate) creation_date: Option<DateTime>,
+    pub(crate) trapped: Option<bool>,
     pub(crate) text_direction: Option<TextDirection>,
     pub(crate) page_layout: Option<PageLayout>,
     pub(crate) display_doc_title: bool,
@@ -119,6 +120,15 @@ impl Metadata {
         self
     }
 
+    /// Whether the document has been fully trapped for printing.
+    ///
+    /// Leave unset when the trapping status is unknown. Set to `false` for
+    /// documents that have not been trapped. Writes both PDF Info and XMP.
+    pub fn trapped(mut self, trapped: bool) -> Self {
+        self.trapped = Some(trapped);
+        self
+    }
+
     /// A document ID.
     ///
     /// This attribute will be used as an identifier for identifying
@@ -195,6 +205,7 @@ impl Metadata {
             || self.authors.is_some()
             || self.creator.is_some()
             || self.creation_date.is_some()
+            || self.trapped.is_some()
             || self.description.is_some()
             || !self.custom_fields.is_empty()
     }
@@ -206,7 +217,14 @@ impl Metadata {
         instance_id: &str,
     ) -> Result<(), XmpError> {
         if let Some(title) = &self.title {
-            xmp.title([(None, title.as_str())]);
+            // Keep the default title available to all readers and identify its
+            // language when known, as recommended for XMP language alternatives.
+            let localized = self
+                .language
+                .as_deref()
+                .filter(|lang| !lang.is_empty() && *lang != "x-default")
+                .map(|lang| (Some(LangId(lang)), title.as_str()));
+            xmp.title(std::iter::once((None, title.as_str())).chain(localized));
         }
 
         if let Some(description) = &self.description {
@@ -266,9 +284,14 @@ impl Metadata {
             xmp.language([LangId(lang)]);
         }
 
+        if let Some(trapped) = self.trapped {
+            xmp.trapped(trapped);
+        }
+
         if let Some(date) = self.creation_date.map(xmp_date) {
             xmp.modify_date(date);
             xmp.create_date(date);
+            xmp.metadata_date(date);
 
             if sc
                 .serialize_settings()
@@ -483,6 +506,14 @@ impl Metadata {
                 if let Some(producer) = &self.producer {
                     document_info.producer(TextStr(producer));
                 }
+            }
+
+            if let Some(trapped) = self.trapped {
+                document_info.trapped(if trapped {
+                    TrappingStatus::Trapped
+                } else {
+                    TrappingStatus::NotTrapped
+                });
             }
 
             if let Some(date_time) = self.creation_date {
@@ -783,6 +814,11 @@ fn managed_schemas() -> &'static [Schema] {
                         "The date the document was created",
                     ),
                     (
+                        "MetadataDate",
+                        Date.into(),
+                        "The date the metadata was last modified",
+                    ),
+                    (
                         "ModifyDate",
                         Date.into(),
                         "The date the document was last modified",
@@ -808,11 +844,6 @@ fn managed_schemas() -> &'static [Schema] {
                         "The version identifier of the document",
                     ),
                     (
-                        "RenditionClass",
-                        RenditionClass.into(),
-                        "The rendition class of the document",
-                    ),
-                    (
                         "History",
                         ValueType::ordered_array(PredefinedStruct::ResourceEvent),
                         "The high-level actions that resulted in this document",
@@ -836,6 +867,11 @@ fn managed_schemas() -> &'static [Schema] {
                         "Keywords associated with the document",
                     ),
                     ("PDFVersion", Text.into(), "The PDF version of the document"),
+                    (
+                        "Trapped",
+                        Text.into(),
+                        "Whether the document has been trapped",
+                    ),
                     (
                         "Producer",
                         AgentName.into(),
@@ -1734,6 +1770,49 @@ mod tests {
         assert_eq!(xmp.matches("<pdfaSchema:namespaceURI>").count(), 1);
         assert_eq!(xmp.matches("<pdfaProperty:name>part<").count(), 1);
         assert_eq!(xmp.matches("<pdfaProperty:name>custom<").count(), 1);
+    }
+
+    #[test]
+    fn document_metadata_has_localized_title_and_consistent_dates() {
+        let mut document = crate::Document::new();
+        document.start_page().finish();
+        document.set_metadata(
+            Metadata::new()
+                .title("Café & <Canva>".into())
+                .language("en-AU".into())
+                .creation_date(super::DateTime::new(2026).month(11).day(18))
+                .trapped(false),
+        );
+        let bytes = document.finish().unwrap();
+        let pdf = String::from_utf8_lossy(&bytes);
+        assert!(pdf.contains("/Trapped/False"));
+        assert!(pdf.contains("<pdf:Trapped>False</pdf:Trapped>"));
+        for lang in ["x-default", "en-AU"] {
+            assert!(pdf.contains(&format!(
+                "<rdf:li xml:lang=\"{lang}\">Café &amp; &lt;Canva&gt;</rdf:li>"
+            )));
+        }
+        for field in ["CreateDate", "ModifyDate", "MetadataDate"] {
+            assert!(pdf.contains(&format!("<xmp:{field}>2026-11-18T00:00:00Z</xmp:{field}>")));
+        }
+        assert!(!pdf.contains("RenditionClass"));
+    }
+
+    #[test]
+    fn trapping_is_optional_and_default_title_is_not_duplicated() {
+        for language in [None, Some(""), Some("x-default")] {
+            let mut metadata = Metadata::new().title("Title".into());
+            if let Some(language) = language {
+                metadata = metadata.language(language.into());
+            }
+            let mut document = crate::Document::new();
+            document.start_page().finish();
+            document.set_metadata(metadata);
+            let bytes = document.finish().unwrap();
+            let pdf = String::from_utf8_lossy(&bytes);
+            assert!(!pdf.contains("Trapped"));
+            assert_eq!(pdf.matches("xml:lang=\"x-default\"").count(), 1);
+        }
     }
 
     #[test]
